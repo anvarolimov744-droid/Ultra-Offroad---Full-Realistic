@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Ultra Offroad - Full Realistic</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { overflow: hidden; background-color: #87CEEB; font-family: 'Arial', sans-serif; touch-action: none; user-select: none; }
+        canvas { display: block; }
+
+        /* --- YUQORI PANEL --- */
+        #top-hud {
+            position: absolute; top: 0; left: 0; width: 100%;
+            display: flex; justify-content: space-between; align-items: flex-start;
+            padding: 15px; pointer-events: none; z-index: 100;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8); color: white;
+        }
+        .hud-box {
+            background: rgba(0, 0, 0, 0.5); border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 10px; padding: 8px 15px; font-weight: bold; font-size: 16px;
+            display: flex; flex-direction: column; gap: 5px;
+        }
+        #weather-info { font-size: 12px; color: #ddd; }
+        #wanted-level { font-size: 20px; color: #f1c40f; letter-spacing: 2px; }
+
+        /* --- PASTKI PANEL --- */
+        #bottom-controls {
+            position: absolute; bottom: 20px; left: 0; width: 100%;
+            display: flex; justify-content: space-between; padding: 0 30px; pointer-events: none; z-index: 100;
+        }
+        #steering-wheel { position: relative; width: 130px; height: 130px; pointer-events: auto; display: flex; justify-content: center; align-items: center; }
+        .wheel-bg {
+            width: 100%; height: 100%; border-radius: 50%; background: radial-gradient(circle, #333 40%, #111 60%, #000 100%);
+            border: 5px solid #222; box-shadow: 0 10px 20px rgba(0,0,0,0.5), inset 0 0 20px #000;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .spoke { position: absolute; background: #222; border-radius: 5px; }
+        .spoke-h { width: 90%; height: 15px; }
+        .spoke-v { width: 15px; height: 90%; }
+        .wheel-center { width: 40px; height: 40px; background: #444; border-radius: 50%; z-index: 2; border: 2px solid #111; }
+        .steer-zone { position: absolute; top: 0; height: 100%; width: 50%; z-index: 10; }
+        #steer-left { left: 0; border-radius: 70px 0 0 70px; }
+        #steer-right { right: 0; border-radius: 0 70px 70px 0; }
+        .steer-zone:active { background: rgba(255,255,255,0.1); }
+
+        #pedals { display: flex; gap: 15px; align-items: flex-end; }
+        .pedal {
+            width: 75px; height: 100px; background: linear-gradient(to bottom, #555, #222);
+            border: 3px solid #111; border-radius: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center;
+            color: white; font-size: 30px; font-weight: bold; pointer-events: auto; box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+        .pedal:active { transform: scale(0.95); background: linear-gradient(to bottom, #444, #111); }
+        .pedal-label { font-size: 10px; margin-top: 5px; color: #aaa; }
+        #pedal-brake { height: 80px; background: linear-gradient(to bottom, #c0392b, #7b241c); border-color: #5a1a13; }
+        #pedal-gas { background: linear-gradient(to bottom, #27ae60, #145a32); border-color: #0e3b21; }
+
+        #action-buttons { position: absolute; top: 100px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 100; }
+        .action-btn {
+            background: rgba(0,0,0,0.6); color: white; border: 2px solid rgba(255,255,255,0.5);
+            padding: 10px 20px; border-radius: 8px; font-weight: bold; font-size: 14px; pointer-events: auto; text-align: center; cursor: pointer;
+        }
+        #drone-controls { position: absolute; bottom: 150px; right: 20px; display: none; flex-direction: column; gap: 10px; z-index: 100; }
+        .drone-btn { width: 60px; height: 60px; border-radius: 50%; background: rgba(255,255,255,0.2); border: 2px solid white; color: white; font-size: 24px; display: flex; align-items: center; justify-content: center; pointer-events: auto; cursor: pointer; }
+        
+        #photo-btn {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 70px; height: 70px; border-radius: 50%;
+            background: rgba(255,255,255,0.8); border: 4px solid #fff; color: #333; font-size: 30px; display: none; align-items: center; justify-content: center;
+            pointer-events: auto; z-index: 100; box-shadow: 0 0 15px rgba(0,0,0,0.5); cursor: pointer;
+        }
+        #flash-effect { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: white; opacity: 0; pointer-events: none; z-index: 999; transition: opacity 0.1s; }
+        #orientation-warning { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 20px; border-radius: 10px; text-align: center; font-size: 20px; display: none; z-index: 999; }
+        @media (orientation: portrait) { #orientation-warning { display: block; } }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="orientation-warning">Iltimos, telefonni yonboshiga (gorizontal) buring!</div>
+    <div id="flash-effect"></div>
+
+    <div id="top-hud">
+        <div class="hud-box">
+            <div>🪙 <span id="coins">0</span>/12</div>
+            <div id="wanted-level"></div>
+        </div>
+        <div class="hud-box" style="align-items: center;">
+            <div style="font-family: monospace; font-size: 20px;">00:<span id="timer">00</span>:<span id="ms">000</span></div>
+            <div id="weather-info">Quyoshli ☀️ | Kunduz</div>
+        </div>
+        <div class="hud-box" style="align-items: flex-end;">
+            <div>LEVEL 1</div>
+            <div style="font-size: 14px;">Tezlik: <span id="speed">0</span> km/h</div>
+        </div>
+    </div>
+
+    <div id="action-buttons">
+        <div class="action-btn" id="cam-btn">Kamera</div>
+        <div class="action-btn" id="mode-btn" style="background: rgba(39, 174, 96, 0.7);">Dron</div>
+    </div>
+
+    <div id="drone-controls">
+        <div class="drone-btn" id="btn-space" style="background: rgba(52, 152, 219, 0.6);">▲</div>
+        <div class="drone-btn" id="btn-shift" style="background: rgba(231, 76, 60, 0.6);">▼</div>
+    </div>
+
+    <div id="photo-btn">📸</div>
+
+    <div id="bottom-controls">
+        <div id="steering-wheel">
+            <div class="wheel-bg">
+                <div class="spoke spoke-h"></div><div class="spoke spoke-v"></div><div class="wheel-center"></div>
+            </div>
+            <div class="steer-zone" id="steer-left"></div>
+            <div class="steer-zone" id="steer-right"></div>
+        </div>
+
+        <div id="pedals">
+            <div class="pedal" id="pedal-brake">▼<div class="pedal-label">TORMOZ</div></div>
+            <div class="pedal" id="pedal-gas">▲<div class="pedal-label">GAZ</div></div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. ASOSIY SOZLAMALAR ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x9bc2e6);
+        scene.fog = new THREE.Fog(0x9bc2e6, 150, 700);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+        // Rasm olish uchun preserveDrawingBuffer: true SHART
+        const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // --- 2. YORUG'LIK VA OB-HAVO ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
+        scene.add(ambientLight);
+        
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5);
+        scene.add(hemiLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+        dirLight.position.set(150, 200, 100);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.left = -100;
+        dirLight.shadow.camera.right = 100;
+        dirLight.shadow.camera.top = 100;
+        dirLight.shadow.camera.bottom = -100;
+        scene.add(dirLight);
+
+        // Yomg'ir zarrachalari
+        const rainCount = 3000;
+        const rainGeo = new THREE.BufferGeometry();
+        const rainPositions = new Float32Array(rainCount * 3);
+        for (let i = 0; i < rainCount * 3; i += 3) {
+            rainPositions[i] = (Math.random() - 0.5) * 200;
+            rainPositions[i+1] = Math.random() * 100;
+            rainPositions[i+2] = (Math.random() - 0.5) * 200;
+        }
+        rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3));
+        const rainMat = new THREE.PointsMaterial({ color: 0xaaccff, size: 0.8, transparent: true, opacity: 0.7 });
+        const rain = new THREE.Points(rainGeo, rainMat);
+        scene.add(rain);
+        rain.visible = false;
+
+        // --- 3. TOG'LI YO'L (Yashil va silliq) ---
+        function createGroundTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512; canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#2d4c1e'; ctx.fillRect(0, 0, 512, 512); // Yashil
+            for (let i = 0; i < 30000; i++) {
+                ctx.fillStyle = Math.random() > 0.5 ? '#1a3010' : '#3d6128';
+                ctx.beginPath(); ctx.arc(Math.random()*512, Math.random()*512, Math.random()*3, 0, Math.PI*2); ctx.fill();
+            }
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(100, 100);
+            return tex;
+        }
+
+        const terrainSize = 2000;
+        const geo = new THREE.PlaneGeometry(terrainSize, terrainSize, 100, 100);
+        geo.rotateX(-Math.PI / 2);
+        const vertices = geo.attributes.position.array;
+        for (let i = 0; i < vertices.length; i += 3) {
+            const x = vertices[i], z = vertices[i + 2];
+            let y = Math.sin(x * 0.005) * Math.cos(z * 0.005) * 25;
+            y += Math.sin(x * 0.02) * Math.cos(z * 0.02) * 8;
+            vertices[i + 1] = y;
+        }
+        geo.computeVertexNormals();
+        const ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: createGroundTexture(), roughness: 0.9 }));
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // --- 4. HAQIQIY MASHINA (Batafsil) ---
+        const carGroup = new THREE.Group();
+        const paintMat = new THREE.MeshPhysicalMaterial({ color: 0xd35400, roughness: 0.2, metalness: 0.7, clearcoat: 1.0 });
+        const blackMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+        const chromeMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.1, metalness: 1.0 });
+        const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x88aaff, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.3 });
+        const rubberMat = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 1.0 });
+        const skinMat = new THREE.MeshStandardMaterial({ color: 0xe0ac69, roughness: 0.7 }); 
+        const seatMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9 });
+        const dashboardMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.7 });
+
+        // Shassi
+        const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.4, 6.2), blackMat);
+        chassis.position.y = 1.0; chassis.castShadow = true; carGroup.add(chassis);
+
+        // Kuzov
+        const bodyBase = new THREE.Mesh(new THREE.BoxGeometry(2.8, 1.2, 5.5), paintMat);
+        bodyBase.position.y = 1.8; bodyBase.castShadow = true; carGroup.add(bodyBase);
+
+        // Kapot
+        const hood = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.6, 1.8), paintMat);
+        hood.position.set(0, 2.1, 1.8); hood.castShadow = true; carGroup.add(hood);
+
+        // Eshiklar
+        const doorL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.2, 2.2), paintMat);
+        doorL.position.set(-1.41, 1.8, -0.5); carGroup.add(doorL);
+        const doorR = doorL.clone(); doorR.position.x = 1.41; carGroup.add(doorR);
+
+        // Gardishlar
+        const fenderGeo = new THREE.BoxGeometry(0.2, 0.4, 1.8);
+        const fenderFL = new THREE.Mesh(fenderGeo, blackMat); fenderFL.position.set(-1.5, 1.5, 1.8); carGroup.add(fenderFL);
+        const fenderFR = fenderFL.clone(); fenderFR.position.x = 1.5; carGroup.add(fenderFR);
+        const fenderRL = fenderFL.clone(); fenderRL.position.z = -1.8; carGroup.add(fenderRL);
+        const fenderRR = fenderFL.clone(); fenderRR.position.set(1.5, 1.5, -1.8); carGroup.add(fenderRR);
+
+        // Panjara
+        const grilleBase = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.9, 0.2), blackMat);
+        grilleBase.position.set(0, 1.9, 2.8); carGroup.add(grilleBase);
+        for(let i=-0.9; i<=0.9; i+=0.3) {
+            const slat = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.7, 0.1), paintMat);
+            slat.position.set(i, 1.9, 2.9); carGroup.add(slat);
+        }
+
+        // Farlar
+        const headLightMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, emissive: 0xffffaa, emissiveIntensity: 0 });
+        const hlLeft = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.1, 16), headLightMat);
+        hlLeft.rotation.x = Math.PI / 2; hlLeft.position.set(-0.9, 1.9, 2.85); carGroup.add(hlLeft);
+        const hlRight = hlLeft.clone(); hlRight.position.x = 0.9; carGroup.add(hlRight);
+
+        // Mashina yorug'ligi (Tun uchun)
+        const carLight = new THREE.SpotLight(0xffffff, 0, 100, Math.PI/4, 0.5, 1);
+        carLight.position.set(0, 2, 3); carLight.target.position.set(0, 0, 20);
+        carGroup.add(carLight); carGroup.add(carLight.target);
+
+        // Tom va Oynalar
+        const cabinRoof = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.2, 3.5), blackMat);
+        cabinRoof.position.set(0, 3.8, -0.5); cabinRoof.castShadow = true; carGroup.add(cabinRoof);
+
+        const windshield = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.4, 0.1), glassMat);
+        windshield.position.set(0, 3.1, 1.1); carGroup.add(windshield);
+
+        const seatL = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.8), seatMat);
+        seatL.position.set(-0.7, 2.2, -0.5); carGroup.add(seatL);
+
+        const dashboard = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.5, 0.8), dashboardMat);
+        dashboard.position.set(0, 2.4, 0.8); carGroup.add(dashboard);
+
+        // Rul va Qo'llar
+        const steeringWheelGroup = new THREE.Group();
+        steeringWheelGroup.position.set(-0.7, 2.6, 0.4); steeringWheelGroup.rotation.x = -Math.PI / 4; steeringWheelGroup.scale.set(0.6, 0.6, 0.6);
+        
+        const swRim = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.05, 12, 32), blackMat); steeringWheelGroup.add(swRim);
+        const swCenter = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.05, 12), chromeMat); swCenter.rotation.x = Math.PI / 2; steeringWheelGroup.add(swCenter);
+        const swSpoke1 = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.04, 0.04), chromeMat); steeringWheelGroup.add(swSpoke1);
+        const swSpoke2 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.3, 0.04), chromeMat); swSpoke2.position.y = -0.15; steeringWheelGroup.add(swSpoke2);
+
+        const createHand = (isLeft) => {
+            const handGroup = new THREE.Group();
+            const palm = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), skinMat); palm.scale.set(1, 1.2, 0.6); handGroup.add(palm);
+            const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.3, 8), new THREE.MeshStandardMaterial({ color: 0x2c3e50 }));
+            sleeve.rotation.x = Math.PI/2; sleeve.position.set(0, 0, 0.15); handGroup.add(sleeve);
+            return handGroup;
+        };
+        const leftHand = createHand(true); leftHand.position.set(-0.35, 0, 0.05); leftHand.rotation.z = -Math.PI/2; steeringWheelGroup.add(leftHand);
+        const rightHand = createHand(false); rightHand.position.set(0.35, 0, 0.05); rightHand.rotation.z = Math.PI/2; steeringWheelGroup.add(rightHand);
+        carGroup.add(steeringWheelGroup);
+
+        // G'ildiraklar
+        const wheels = [];
+        const frontWheels = [];
+        const wheelPositions = [
+            { x: -1.5, y: 0.9, z: 1.8, front: true }, { x: 1.5, y: 0.9, z: 1.8, front: true },
+            { x: -1.5, y: 0.9, z: -1.8, front: false }, { x: 1.5, y: 0.9, z: -1.8, front: false }
+        ];
+        wheelPositions.forEach(pos => {
+            const wheelGroup = new THREE.Group(); wheelGroup.position.set(pos.x, pos.y, pos.z);
+            const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.6, 16), rubberMat);
+            tire.rotation.z = Math.PI / 2; tire.castShadow = true; wheelGroup.add(tire);
+            for(let i=0; i<12; i++) {
+                const tread = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.1, 0.2), rubberMat);
+                const angle = (i / 12) * Math.PI * 2;
+                tread.position.set(0, Math.cos(angle)*0.9, Math.sin(angle)*0.9);
+                tread.rotation.x = -angle; wheelGroup.add(tread);
+            }
+            const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.65, 5), chromeMat);
+            rim.rotation.z = Math.PI / 2; wheelGroup.add(rim);
+            carGroup.add(wheelGroup); wheels.push(tire);
+            if (pos.front) frontWheels.push(wheelGroup);
+        });
+        scene.add(carGroup);
+
+        // --- 5. POLITSIYA ---
+        const policeGroup = new THREE.Group();
+        policeGroup.visible = false;
+        const pBody = new THREE.Mesh(new THREE.BoxGeometry(2.8, 1.2, 5.5), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+        pBody.position.y = 1.8; pBody.castShadow = true; policeGroup.add(pBody);
+        const pCabin = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.2, 2.5), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+        pCabin.position.set(0, 2.8, -0.5); policeGroup.add(pCabin);
+        
+        const pLightRed = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.2, 0.4), new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 2 }));
+        pLightRed.position.set(-0.5, 3.5, -0.5); policeGroup.add(pLightRed);
+        const pLightBlue = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.2, 0.4), new THREE.MeshStandardMaterial({ color: 0x0000ff, emissive: 0x0000ff, emissiveIntensity: 2 }));
+        pLightBlue.position.set(0.5, 3.5, -0.5); policeGroup.add(pLightBlue);
+        scene.add(policeGroup);
+
+        // --- 6. DRON ---
+        const droneGroup = new THREE.Group();
+        droneGroup.visible = false;
+        const droneBodyMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.6, metalness: 0.4 });
+        const droneAccentMat = new THREE.MeshStandardMaterial({ color: 0xff3300, roughness: 0.4 });
+        const propMat = new THREE.MeshStandardMaterial({ color: 0x111111, transparent: true, opacity: 0.7 });
+
+        const dBody = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.2, 0.8), droneBodyMat);
+        dBody.castShadow = true; droneGroup.add(dBody);
+        const dCam = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 12), blackMat);
+        dCam.position.set(0, -0.05, 0.4); droneGroup.add(dCam);
+
+        const propellers = [];
+        const armPositions = [{ x: -0.5, z: 0.5 }, { x: 0.5, z: 0.5 }, { x: -0.5, z: -0.5 }, { x: 0.5, z: -0.5 }];
+        armPositions.forEach(pos => {
+            const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.1, 12), droneAccentMat);
+            motor.position.set(pos.x, 0.05, pos.z); droneGroup.add(motor);
+            const propGroup = new THREE.Group();
+            propGroup.position.set(pos.x, 0.12, pos.z);
+            const blade1 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.01, 0.05), propMat); propGroup.add(blade1);
+            const blade2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.01, 0.5), propMat); propGroup.add(blade2);
+            droneGroup.add(propGroup);
+            propellers.push(propGroup);
+        });
+        scene.add(droneGroup);
+
+        // --- 7. O'RMON VA HAYVONLAR ---
+        const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x3d2314 });
+        const treeLeavesMat = new THREE.MeshStandardMaterial({ color: 0x2a4a1a, flatShading: true });
+        for (let i = 0; i < 150; i++) {
+            let tx = (Math.random() - 0.5) * 1500; let tz = (Math.random() - 0.5) * 1500;
+            let ty = Math.sin(tx * 0.005) * Math.cos(tz * 0.005) * 25 + Math.sin(tx * 0.02) * Math.cos(tz * 0.02) * 8;
+            if (Math.hypot(tx, tz) > 20) {
+                const tree = new THREE.Group();
+                const h = 4 + Math.random() * 4;
+                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.6, h, 6), treeTrunkMat);
+                trunk.position.y = h / 2; trunk.castShadow = true; tree.add(trunk);
+                const leaves = new THREE.Mesh(new THREE.IcosahedronGeometry(2.5, 0), treeLeavesMat);
+                leaves.position.y = h - 0.5; leaves.castShadow = true; tree.add(leaves);
+                tree.position.set(tx, ty, tz); scene.add(tree);
+            }
+        }
+
+        // Kiyiklar
+        const animals = [];
+        const furMat = new THREE.MeshStandardMaterial({ color: 0x9c6b45, roughness: 0.9 });
+        const darkFurMat = new THREE.MeshStandardMaterial({ color: 0x5a3d26, roughness: 0.9 });
+        function createDeer(x, z) {
+            const deerGroup = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.7, 2.2, 8), furMat);
+            body.rotation.x = Math.PI / 2; body.position.y = 2.0; body.castShadow = true; deerGroup.add(body);
+            const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, 1.2, 6), furMat);
+            neck.position.set(0, 2.7, 1.0); neck.rotation.x = -0.4; deerGroup.add(neck);
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.8), furMat);
+            head.position.set(0, 3.2, 1.3); deerGroup.add(head);
+
+            const legs = [];
+            const legPositions = [{ x: -0.4, z: 0.8, phase: 0 }, { x: 0.4, z: 0.8, phase: Math.PI }, { x: -0.4, z: -0.8, phase: Math.PI }, { x: 0.4, z: -0.8, phase: 0 }];
+            legPositions.forEach(pos => {
+                const legGroup = new THREE.Group(); legGroup.position.set(pos.x, 1.6, pos.z);
+                const upperLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.1, 0.8, 6), furMat);
+                upperLeg.position.y = -0.4; legGroup.add(upperLeg);
+                const lowerLegGroup = new THREE.Group(); lowerLegGroup.position.y = -0.8;
+                const lowerLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.05, 0.8, 6), darkFurMat);
+                lowerLeg.position.y = -0.4; lowerLegGroup.add(lowerLeg);
+                legGroup.add(lowerLegGroup); deerGroup.add(legGroup);
+                legs.push({ upper: legGroup, lower: lowerLegGroup, phase: pos.phase });
+            });
+
+            let ty = Math.sin(x * 0.005) * Math.cos(z * 0.005) * 25 + Math.sin(x * 0.02) * Math.cos(z * 0.02) * 8;
+            deerGroup.position.set(x, ty, z);
+            deerGroup.rotation.y = Math.random() * Math.PI * 2;
+            scene.add(deerGroup);
+            animals.push({ group: deerGroup, legs: legs, speed: 1.5, dir: deerGroup.rotation.y, timer: 0, flee: false });
+        }
+        for (let i = 0; i < 15; i++) {
+            let ax = (Math.random() - 0.5) * 800; let az = (Math.random() - 0.5) * 800;
+            if (Math.hypot(ax, az) > 30) createDeer(ax, az);
+        }
+
+        // Qushlar
+        const birds = [];
+        const featherMat = new THREE.MeshStandardMaterial({ color: 0x2c3e50, side: THREE.DoubleSide });
+        for (let i = 0; i < 20; i++) {
+            const birdGroup = new THREE.Group();
+            const bBody = new THREE.Mesh(new THREE.ConeGeometry(0.2, 1.2, 6), featherMat); bBody.rotation.x = -Math.PI / 2; birdGroup.add(bBody);
+            const wingGeo = new THREE.BoxGeometry(1.2, 0.05, 0.4);
+            const leftWing = new THREE.Mesh(wingGeo, featherMat); leftWing.position.set(-0.6, 0, 0); birdGroup.add(leftWing);
+            const rightWing = new THREE.Mesh(wingGeo, featherMat); rightWing.position.set(0.6, 0, 0); birdGroup.add(rightWing);
+            
+            let bx = (Math.random() - 0.5) * 600, by = 40 + Math.random() * 20, bz = (Math.random() - 0.5) * 600;
+            birdGroup.position.set(bx, by, bz);
+            scene.add(birdGroup);
+            birds.push({ group: birdGroup, lw: leftWing, rw: rightWing, speed: 8 + Math.random()*5, angle: Math.random()*Math.PI*2, radius: 50 + Math.random()*50, center: new THREE.Vector3(bx, by, bz), flapSpeed: 10 });
+        }
+
+
+        // --- 8. FIZIKA VA BOSHQARUV ---
+        const carState = { speed: 0, maxSpeed: 35, accel: 12, steerSpeed: 1.5, heading: 0, tilt: 0, currentSteer: 0, currentY: 0 };
+        const droneState = { speed: 0, maxSpeed: 30, heading: 0, pitch: 0, roll: 0, altitude: 20 };
+        const keys = { w: false, a: false, s: false, d: false, space: false, shift: false };
+        
+        let cameraMode = '3rd';
+        let gameMode = 'car';
+        let wantedLevel = 0;
+        let gameTime = 12; 
+        let isRaining = false;
+        let weatherTimer = 0;
+        let policeChase = false;
+        
+        function bindTouch(id, key) {
+            const btn = document.getElementById(id);
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[key] = true; });
+            btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[key] = false; });
+            btn.addEventListener('mousedown', (e) => { e.preventDefault(); keys[key] = true; });
+            btn.addEventListener('mouseup', (e) => { e.preventDefault(); keys[key] = false; });
+        }
+        bindTouch('steer-left', 'a'); bindTouch('steer-right', 'd');
+        bindTouch('pedal-gas', 'w'); bindTouch('pedal-brake', 's');
+        bindTouch('btn-space', 'space'); bindTouch('btn-shift', 'shift');
+
+        document.getElementById('cam-btn').addEventListener('click', () => {
+            if (gameMode === 'car') {
+                if (cameraMode === '3rd') { cameraMode = '1st'; document.getElementById('cam-btn').innerText = "1-shaxs"; cabinRoof.visible = false; }
+                else { cameraMode = '3rd'; document.getElementById('cam-btn').innerText = "3-shaxs"; cabinRoof.visible = true; }
+            }
+        });
+
+        document.getElementById('mode-btn').addEventListener('click', () => {
+            if (gameMode === 'car') {
+                gameMode = 'drone';
+                carGroup.visible = false; droneGroup.visible = true;
+                droneGroup.position.copy(carGroup.position).add(new THREE.Vector3(0, 15, 0));
+                droneState.heading = carState.heading; droneState.altitude = droneGroup.position.y;
+                document.getElementById('mode-btn').innerText = "Mashina";
+                document.getElementById('cam-btn').style.display = 'none';
+                document.getElementById('drone-controls').style.display = 'flex';
+                document.getElementById('photo-btn').style.display = 'flex';
+            } else {
+                gameMode = 'car';
+                carGroup.visible = true; droneGroup.visible = false;
+                carState.speed = 0;
+                document.getElementById('mode-btn').innerText = "Dron";
+                document.getElementById('cam-btn').style.display = 'block';
+                document.getElementById('drone-controls').style.display = 'none';
+                document.getElementById('photo-btn').style.display = 'none';
+            }
+        });
+
+        // --- RASM OLISH ---
+        document.getElementById('photo-btn').addEventListener('click', () => {
+            const flash = document.getElementById('flash-effect');
+            flash.style.opacity = '1';
+            setTimeout(() => { flash.style.opacity = '0'; }, 150);
+            
+            setTimeout(() => {
+                const dataURL = renderer.domElement.toDataURL('image/png');
+                const link = document.createElement('a');
+                link.download = 'offroad_photo.png';
+                link.href = dataURL;
+                link.click();
+            }, 200);
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (['w','W','ArrowUp'].includes(e.key)) keys.w = true;
+            if (['s','S','ArrowDown'].includes(e.key)) keys.s = true;
+            if (['a','A','ArrowLeft'].includes(e.key)) keys.a = true;
+            if (['d','D','ArrowRight'].includes(e.key)) keys.d = true;
+            if (e.key === ' ') keys.space = true;
+            if (e.key === 'Shift') keys.shift = true;
+            if (e.key === 'c' || e.key === 'C') document.getElementById('cam-btn').click();
+            if (e.key === 'b' || e.key === 'B') document.getElementById('mode-btn').click();
+        });
+        window.addEventListener('keyup', (e) => {
+            if (['w','W','ArrowUp'].includes(e.key)) keys.w = false;
+            if (['s','S','ArrowDown'].includes(e.key)) keys.s = false;
+            if (['a','A','ArrowLeft'].includes(e.key)) keys.a = false;
+            if (['d','D','ArrowRight'].includes(e.key)) keys.d = false;
+            if (e.key === ' ') keys.space = false;
+            if (e.key === 'Shift') keys.shift = false;
+        });
+
+        // --- 9. O'YIN SIKLI ---
+        const raycaster = new THREE.Raycaster();
+        const downVector = new THREE.Vector3(0, -1, 0);
+        const clock = new THREE.Clock();
+        let startTime = Date.now();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.1);
+            const time = clock.getElapsedTime();
+
+            // VAQT VA OB-HAVO
+            gameTime += dt * 0.1;
+            if (gameTime > 24) gameTime = 0;
+            
+            let isNight = (gameTime < 6 || gameTime > 19);
+            if (isNight) {
+                scene.background.setHex(0x050a15); scene.fog.color.setHex(0x050a15);
+                ambientLight.intensity = 0.2; dirLight.intensity = 0.1;
+                headLightMat.emissiveIntensity = 2; carLight.intensity = 2;
+                document.getElementById('weather-info').innerText = (isRaining ? "Yomg'ir 🌧️" : "Tiniq 🌙") + " | Tun";
+            } else {
+                scene.background.setHex(0x9bc2e6); scene.fog.color.setHex(0x9bc2e6);
+                ambientLight.intensity = 0.6; dirLight.intensity = 1.2;
+                headLightMat.emissiveIntensity = 0; carLight.intensity = 0;
+                document.getElementById('weather-info').innerText = (isRaining ? "Yomg'ir 🌧️" : "Quyoshli ☀️") + " | Kunduz";
+            }
+
+            weatherTimer += dt;
+            if (weatherTimer > 20) {
+                weatherTimer = 0;
+                isRaining = Math.random() > 0.5;
+                rain.visible = isRaining;
+            }
+            
+            if (isRaining) {
+                const positions = rain.geometry.attributes.position.array;
+                for (let i = 1; i < positions.length; i += 3) {
+                    positions[i] -= 50 * dt;
+                    if (positions[i] < 0) positions[i] = 100;
+                }
+                rain.geometry.attributes.position.needsUpdate = true;
+                // Yomg'irni mashina atrofida ushlab turish
+                rain.position.x = camera.position.x;
+                rain.position.z = camera.position.z;
+            }
+
+            if (gameMode === 'car') {
+                // MASHINA FIZIKASI
+                let friction = isRaining ? 0.99 : 0.98;
+                if (keys.w) carState.speed += carState.accel * dt;
+                else if (keys.s) carState.speed -= carState.accel * 1.5 * dt;
+                else carState.speed *= friction;
+
+                if (keys.space) carState.speed *= 0.9;
+                carState.speed = Math.max(-carState.maxSpeed/2, Math.min(carState.maxSpeed, carState.speed));
+
+                let targetSteer = 0;
+                if (keys.a) targetSteer = 0.5;
+                if (keys.d) targetSteer = -0.5;
+                carState.currentSteer = THREE.MathUtils.lerp(carState.currentSteer, targetSteer, 8 * dt);
+
+                if (Math.abs(carState.speed) > 0.5) {
+                    let speedFactor = Math.min(Math.abs(carState.speed) / 15, 1.0);
+                    carState.heading += carState.currentSteer * carState.steerSpeed * dt * speedFactor * (isRaining ? 1.5 : 1.0);
+                    carState.tilt = THREE.MathUtils.lerp(carState.tilt, -carState.currentSteer * 0.15, 0.1);
+                } else carState.tilt = THREE.MathUtils.lerp(carState.tilt, 0, 0.1);
+
+                frontWheels.forEach(w => { w.rotation.y = carState.currentSteer; });
+                steeringWheelGroup.rotation.z = carState.currentSteer * 2.0;
+
+                carGroup.position.x += Math.sin(carState.heading) * carState.speed * dt;
+                carGroup.position.z += Math.cos(carState.heading) * carState.speed * dt;
+                
+                raycaster.set(carGroup.position.clone().add(new THREE.Vector3(0, 20, 0)), downVector);
+                const intersects = raycaster.intersectObject(ground);
+                if (intersects.length > 0) {
+                    const groundY = intersects[0].point.y;
+                    carState.currentY = THREE.MathUtils.lerp(carState.currentY, groundY, 10 * dt);
+                    carGroup.position.y = carState.currentY;
+                    const normal = intersects[0].face.normal;
+                    const targetQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), normal);
+                    const tiltQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, carState.heading, carState.tilt));
+                    carGroup.quaternion.slerp(targetQuat.multiply(tiltQuat), 0.15);
+                }
+
+                wheels.forEach(wheel => { wheel.rotation.x -= carState.speed * dt * 2; });
+
+                // KAMERA
+                if (cameraMode === '3rd') {
+                    const camDist = 14 + (Math.abs(carState.speed) * 0.1);
+                    const idealOffset = new THREE.Vector3(0, 6, -camDist);
+                    idealOffset.applyQuaternion(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, carState.heading, 0)));
+                    idealOffset.add(carGroup.position);
+                    camera.position.lerp(idealOffset, 0.1);
+                    
+                    const idealLookat = new THREE.Vector3(0, 2, 8);
+                    idealLookat.applyQuaternion(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, carState.heading, 0)));
+                    idealLookat.add(carGroup.position);
+                    camera.lookAt(idealLookat);
+                } else {
+                    const localCamPos = new THREE.Vector3(-0.7, 3.1, 0.1); 
+                    localCamPos.applyQuaternion(carGroup.quaternion);
+                    localCamPos.add(carGroup.position);
+                    camera.position.lerp(localCamPos, 0.5);
+                    
+                    const lookAtPos = new THREE.Vector3(-0.7, 2.8, 20);
+                    lookAtPos.applyQuaternion(carGroup.quaternion);
+                    lookAtPos.add(carGroup.position);
+                    camera.lookAt(lookAtPos);
+                }
+
+                // POLITSIYA
+                let kmh = Math.abs(Math.round(carState.speed * 3.6));
+                if (kmh > 80 && wantedLevel === 0) {
+                    wantedLevel = 1; policeChase = true; policeGroup.visible = true;
+                    policeGroup.position.copy(carGroup.position).add(new THREE.Vector3(Math.sin(carState.heading + Math.PI)*20, 0, Math.cos(carState.heading + Math.PI)*20));
+                }
+
+                if (policeChase) {
+                    let dx = carGroup.position.x - policeGroup.position.x;
+                    let dz = carGroup.position.z - policeGroup.position.z;
+                    let dist = Math.hypot(dx, dz);
+                    let angleToCar = Math.atan2(dx, dz);
+                    policeGroup.rotation.y = angleToCar;
+                    policeGroup.position.x += Math.sin(angleToCar) * 20 * dt;
+                    policeGroup.position.z += Math.cos(angleToCar) * 20 * dt;
+                    
+                    pLightRed.material.emissiveIntensity = Math.sin(time * 20) > 0 ? 5 : 0;
+                    pLightBlue.material.emissiveIntensity = Math.sin(time * 20) > 0 ? 0 : 5;
+
+                    if (dist < 5) {
+                        carState.speed = 0;
+                        document.getElementById('wanted-level').innerText = "★ TUTILDSIZ!";
+                        setTimeout(() => { 
+                            wantedLevel = 0; policeChase = false; policeGroup.visible = false; 
+                            document.getElementById('wanted-level').innerText = "";
+                        }, 2000);
+                    }
+                }
+                let stars = "";
+                for(let i=0; i<wantedLevel; i++) stars += "★";
+                document.getElementById('wanted-level').innerText = stars;
+                document.getElementById('speed').innerText = kmh;
+
+            } else {
+                // DRON FIZIKASI
+                if (keys.w) { droneState.pitch = THREE.MathUtils.lerp(droneState.pitch, 0.3, 0.1); droneState.speed += 15 * dt; }
+                else if (keys.s) { droneState.pitch = THREE.MathUtils.lerp(droneState.pitch, -0.3, 0.1); droneState.speed -= 15 * dt; }
+                else { droneState.pitch = THREE.MathUtils.lerp(droneState.pitch, 0, 0.1); droneState.speed *= 0.98; }
+                
+                droneState.speed = Math.max(-droneState.maxSpeed/2, Math.min(droneState.maxSpeed, droneState.speed));
+
+                if (keys.a) { droneState.roll = THREE.MathUtils.lerp(droneState.roll, 0.2, 0.1); droneState.heading += 1.5 * dt; }
+                else if (keys.d) { droneState.roll = THREE.MathUtils.lerp(droneState.roll, -0.2, 0.1); droneState.heading -= 1.5 * dt; }
+                else { droneState.roll = THREE.MathUtils.lerp(droneState.roll, 0, 0.1); }
+
+                if (keys.space) droneState.altitude += 10 * dt;
+                if (keys.shift) droneState.altitude -= 10 * dt;
+                
+                raycaster.set(droneGroup.position.clone().add(new THREE.Vector3(0, 100, 0)), downVector);
+                const dInt = raycaster.intersectObject(ground);
+                if (dInt.length > 0) {
+                    const minY = dInt[0].point.y + 1.5;
+                    if (droneState.altitude < minY) droneState.altitude = minY;
+                }
+                if (droneState.altitude > 150) droneState.altitude = 150;
+
+                droneGroup.position.x += Math.sin(droneState.heading) * droneState.speed * dt;
+                droneGroup.position.z += Math.cos(droneState.heading) * droneState.speed * dt;
+                droneGroup.position.y = THREE.MathUtils.lerp(droneGroup.position.y, droneState.altitude, 0.2);
+
+                droneGroup.rotation.set(droneState.pitch, droneState.heading, droneState.roll);
+                propellers.forEach(prop => { prop.rotation.y += 50 * dt; });
+
+                const dCamOffset = new THREE.Vector3(0, 3, -8)
+                    .applyQuaternion(new THREE.Quaternion().setFromEuler(new THREE.Euler(droneState.pitch, droneState.heading, droneState.roll)))
+                    .add(droneGroup.position);
+                camera.position.lerp(dCamOffset, 0.1);
+                
+                const dLookAt = new THREE.Vector3(0, 0, 5)
+                    .applyQuaternion(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, droneState.heading, 0)))
+                    .add(droneGroup.position);
+                camera.lookAt(dLookAt);
+
+                document.getElementById('speed').innerText = Math.abs(Math.round(droneState.speed * 3.6));
+            }
+
+            // HAYVONLAR AI
+            animals.forEach(animal => {
+                let distToCar = Math.hypot(animal.group.position.x - carGroup.position.x, animal.group.position.z - carGroup.position.z);
+                if (distToCar < 15 && gameMode === 'car') {
+                    animal.flee = true;
+                    animal.dir = Math.atan2(animal.group.position.x - carGroup.position.x, animal.group.position.z - carGroup.position.z);
+                    animal.speed = 6;
+                } else {
+                    animal.timer -= dt;
+                    if (animal.timer <= 0) { animal.dir += (Math.random() - 0.5) * 1.5; animal.timer = 3 + Math.random() * 4; animal.speed = 1.5; animal.flee = false; }
+                }
+
+                animal.group.position.x += Math.sin(animal.dir) * animal.speed * dt;
+                animal.group.position.z += Math.cos(animal.dir) * animal.speed * dt;
+                animal.group.rotation.y = animal.dir;
+
+                let ay = Math.sin(animal.group.position.x * 0.005) * Math.cos(animal.group.position.z * 0.005) * 25 + Math.sin(animal.group.position.x * 0.02) * Math.cos(animal.group.position.z * 0.02) * 8;
+                animal.group.position.y = ay;
+
+                animal.legs.forEach(leg => {
+                    const walkCycle = Math.sin(time * (animal.flee ? 15 : 6) + leg.phase);
+                    leg.upper.rotation.x = walkCycle * 0.6;
+                    leg.lower.rotation.x = Math.max(0, walkCycle) * 0.8;
+                });
+            });
+
+            // QUSHLAR
+            birds.forEach(bird => {
+                bird.angle += dt * 0.5;
+                bird.group.position.x = bird.center.x + Math.cos(bird.angle) * bird.radius;
+                bird.group.position.z = bird.center.z + Math.sin(bird.angle) * bird.radius;
+                bird.group.position.y = bird.center.y + Math.sin(time * 2 + bird.angle) * 5;
+                bird.group.rotation.y = -bird.angle;
+                const flap = Math.sin(time * bird.flapSpeed) * 0.8;
+                bird.lw.rotation.z = flap; bird.rw.rotation.z = -flap;
+            });
+
+            // HUD VAQT
+            let elapsed = Date.now() - startTime;
+            let seconds = Math.floor((elapsed % 60000) / 1000);
+            let ms = elapsed % 1000;
+            document.getElementById('timer').innerText = seconds.toString().padStart(2, '0');
+            document.getElementById('ms').innerText = ms.toString().padStart(3, '0');
+
+            if (Math.random() < 0.005) {
+                let c = document.getElementById('coins');
+                let current = parseInt(c.innerText);
+                if (current < 12) c.innerText = current + 1;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        cabinRoof.visible = true;
+        animate();
+    </script>
+</body>
+</html>
